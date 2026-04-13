@@ -1,0 +1,678 @@
+
+
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>财务健康指数测评 - Pivort Fin.</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        pivort: { black: '#1a1a1a', dark: '#2d2d2d', green: '#6BBF59', lightgreen: '#5aa848' }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans SC', sans-serif; background-color: #f3f4f6; color: #1a1a1a; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        .slide-fade-enter-active { transition: all 0.4s ease-out; }
+        .slide-fade-leave-active { transition: all 0.3s cubic-bezier(1, 0.5, 0.8, 1); position: absolute; width: 100%; }
+        .slide-fade-enter-from { transform: translateX(20px); opacity: 0; }
+        .slide-fade-leave-to { transform: translateX(-20px); opacity: 0; }
+        .gradient-text { background: linear-gradient(135deg, #6BBF59 0%, #5aa848 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .btn-gradient { background: linear-gradient(135deg, #6BBF59 0%, #5aa848 100%); }
+        .chart-container { position: relative; height: 300px; width: 100%; }
+    </style>
+
+
+    <div id="app" class="min-h-screen flex flex-col">
+        <!-- Navbar -->
+        <nav v-if="currentScreen === 'home'" class="w-full bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+            <div class="max-w-7xl mx-auto px-6 h-24 flex items-center justify-between">
+                <img :src="logoUrl" alt="Logo" class="h-16">
+                <div class="hidden md:block text-sm text-gray-500 font-medium">上海贝沃福企业管理咨询有限公司</div>
+            </div>
+        </nav>
+
+        <main class="flex-grow flex flex-col w-full pb-16 pt-8">
+            <transition name="fade" mode="out-in">
+                <!-- Home Screen -->
+                <div v-if="currentScreen === 'home'" class="w-full flex flex-col items-center px-4 mt-16">
+                    <h1 class="text-5xl font-black mb-6 text-gray-800">财务健康指数测评</h1>
+                    <p class="text-xl text-gray-500 mb-16 max-w-2xl text-center">选择最适合您的测评版本,只需5分钟,即可获得多维度财务健康诊断。</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto w-full">
+                        <div v-for="v in versions" :key="v.id" @click="startAssessment(v.id)" class="bg-white hover:-translate-y-3 hover:border-pivort-green border-2 border-transparent transition-all duration-300 cursor-pointer rounded-3xl p-10 flex flex-col items-center text-center group shadow-lg">
+                            <div class="text-6xl mb-6 group-hover:scale-110 transition-transform">{{ v.icon }}</div>
+                            <h3 class="text-2xl font-bold mb-4 text-gray-800">{{ v.title }}</h3>
+                            <p class="text-gray-500">{{ v.desc }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Assessment Screen -->
+                <div v-else-if="currentScreen === 'assessment'" class="max-w-3xl mx-auto w-full px-4">
+                    <div class="flex justify-between items-center mb-10">
+                        <button @click="backToHome" class="flex items-center text-gray-500 hover:text-pivort-green font-medium">← 返回首页</button>
+                        <span class="px-5 py-2 bg-green-100 text-pivort-green rounded-full text-sm font-bold">{{ activeVersionObj.icon }} {{ activeVersionObj.title }}</span>
+                    </div>
+
+                    <div class="mb-12">
+                        <div class="flex justify-between text-sm font-bold text-gray-500 mb-3">
+                            <span>当前进度</span>
+                            <span class="text-pivort-green">第 {{ currentQuestionIndex + 1 }} 题 / 共 20 题</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-3">
+                            <div class="bg-gradient-to-r from-pivort-green to-pivort-lightgreen h-3 rounded-full transition-all duration-500" :style="{ width: ((currentQuestionIndex + 1) / 20 * 100) + '%' }"></div>
+                        </div>
+                    </div>
+
+                    <div class="relative min-h-[400px]">
+                        <transition name="slide-fade" mode="out-in">
+                            <div :key="currentQuestionIndex" class="bg-white rounded-3xl p-12 shadow-xl border border-gray-100">
+                                <div class="flex justify-between mb-8">
+                                    <div class="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-pivort-green font-black text-xl">{{ currentQuestionIndex + 1 }}</div>
+                                    <span class="px-4 py-1.5 bg-gray-50 text-gray-500 text-sm font-medium rounded-lg">{{ currentQuestion.dim }}</span>
+                                </div>
+                                
+                                <h2 class="text-3xl font-bold mb-10 leading-snug text-gray-800">{{ currentQuestion.q }}</h2>
+
+                                <div class="grid gap-4 mb-8">
+                                    <button v-for="(opt, idx) in currentQuestion.options" :key="idx" @click="selectOption(idx)" :class="['w-full text-left p-5 rounded-2xl border-2 transition-all flex items-center group',
+                                                     answers[currentQuestionIndex] === idx ? 'border-pivort-green bg-pivort-green text-white shadow-lg' : 'border-gray-100 hover:border-green-200 hover:bg-green-50 text-gray-700 bg-white']">
+                                        <div :class="['w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition-all',
+                                                      answers[currentQuestionIndex] === idx ? 'border-white bg-white' : 'border-gray-300 group-hover:border-pivort-green']">
+                                            <div v-if="answers[currentQuestionIndex] === idx" class="w-3 h-3 rounded-full bg-pivort-green"></div>
+                                        </div>
+                                        <span class="flex-1 font-medium">{{ opt.t }}</span>
+                                    </button>
+                                </div>
+
+                                <div class="flex justify-between items-center pt-6 border-t border-gray-100">
+                                    <button @click="prevQuestion" :disabled="currentQuestionIndex === 0" :class="['px-6 py-3 rounded-xl font-bold transition-all',
+                                                     currentQuestionIndex === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']">
+                                        ← 上一题
+                                    </button>
+                                    <button v-if="currentQuestionIndex < 19" @click="nextQuestion" :disabled="answers[currentQuestionIndex] === undefined" :class="['px-6 py-3 rounded-xl font-bold transition-all',
+                                                     answers[currentQuestionIndex] === undefined ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'btn-gradient text-white hover:shadow-lg']">
+                                        下一题 →
+                                    </button>
+                                    <button v-else="" @click="submitAssessment" :disabled="answers[currentQuestionIndex] === undefined" :class="['px-6 py-3 rounded-xl font-bold transition-all',
+                                                     answers[currentQuestionIndex] === undefined ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'btn-gradient text-white hover:shadow-lg']">
+                                        查看报告 →
+                                    </button>
+                                </div>
+                            </div>
+                        </transition>
+                    </div>
+                </div>
+
+                <!-- Result Screen -->
+                <div v-else-if="currentScreen === 'result'" class="max-w-5xl mx-auto w-full px-4">
+                    <div id="report-container" class="bg-white rounded-3xl shadow-2xl overflow-hidden">
+                        <!-- Report Header -->
+                        <div class="bg-gradient-to-br from-pivort-green to-pivort-lightgreen text-white p-12 text-center">
+                            <img :src="logoUrl" alt="Logo" class="h-16 mx-auto mb-6 brightness-0 invert">
+                            <h1 class="text-4xl font-black mb-4">财务健康指数测评报告</h1>
+                            <p class="text-xl opacity-90">{{ activeVersionObj.title }}</p>
+                            <p class="text-sm opacity-75 mt-2">测评日期: {{ currentDate }}</p>
+                        </div>
+
+                        <!-- Score Overview -->
+                        <div class="p-12 border-b border-gray-100">
+                            <div class="text-center mb-8">
+                                <div class="inline-block">
+                                    <div class="text-7xl font-black gradient-text mb-2">{{ totalScore }}</div>
+                                    <div class="text-gray-500 font-medium">综合得分 (满分100分)</div>
+                                </div>
+                            </div>
+                            <div class="flex justify-center gap-6 mb-8">
+                                <div class="px-6 py-3 rounded-full text-lg font-bold" :class="scoreLevel === '优秀' ? 'bg-green-100 text-green-700' : scoreLevel === '良好' ? 'bg-blue-100 text-blue-700' : scoreLevel === '中等' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'">
+                                    {{ scoreLevel }}
+                                </div>
+                            </div>
+                            <p class="text-gray-600 text-center max-w-3xl mx-auto leading-relaxed">{{ suggestionText }}</p>
+                        </div>
+
+                        <!-- Charts Section -->
+                        <div class="p-12 border-b border-gray-100">
+                            <h2 class="text-3xl font-bold mb-8 text-gray-800">可视化分析</h2>
+                            <div class="grid md:grid-cols-2 gap-8">
+                                <div class="bg-gray-50 rounded-2xl p-6">
+                                    <h3 class="text-xl font-bold mb-4 text-gray-700">财务健康雷达图</h3>
+                                    <div class="chart-container">
+                                        <canvas id="radarChart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="bg-gray-50 rounded-2xl p-6">
+                                    <h3 class="text-xl font-bold mb-4 text-gray-700">各维度得分明细表</h3>
+                                    <div class="chart-container">
+                                        <canvas id="barChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dimension Details -->
+                        <div class="p-12 border-b border-gray-100">
+                            <h2 class="text-3xl font-bold mb-8 text-gray-800">维度详细分析</h2>
+                            <div class="grid gap-6">
+                                <div v-for="(score, dim) in dimensionScores" :key="dim" class="bg-gray-50 rounded-2xl p-6 flex items-center justify-between">
+                                    <div class="flex-1">
+                                        <h3 class="text-xl font-bold mb-2 text-gray-800">{{ dim }}</h3>
+                                        <div class="w-full bg-gray-200 rounded-full h-3">
+                                            <div class="h-3 rounded-full transition-all" :class="score >= 67 ? 'bg-green-500' : score >= 34 ? 'bg-yellow-500' : 'bg-red-500'" :style="{ width: score + '%' }"></div>
+                                        </div>
+                                    </div>
+                                    <div class="ml-6 text-3xl font-black" :class="score >= 67 ? 'text-green-600' : score >= 34 ? 'text-yellow-600' : 'text-red-600'">
+                                        {{ score }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Risk Alerts -->
+                        <div v-if="hasRisks" class="p-12 border-b border-gray-100 bg-red-50">
+                            <h2 class="text-3xl font-bold mb-8 text-red-800">⚠️ 风险预警</h2>
+                            <div class="grid gap-6">
+                                <div v-for="alert in riskAlerts" :key="alert.dim" class="bg-white rounded-2xl p-6 border-l-4" :class="alert.level === '高风险' ? 'border-red-500' : 'border-yellow-500'">
+                                    <div class="flex items-start justify-between mb-3">
+                                        <h3 class="text-xl font-bold" :class="alert.level === '高风险' ? 'text-red-700' : 'text-yellow-700'">{{ alert.dim }}</h3>
+                                        <span class="px-3 py-1 rounded-full text-sm font-bold" :class="alert.level === '高风险' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'">{{ alert.level }}</span>
+                                    </div>
+                                    <p class="text-gray-700 mb-2">{{ alert.status }}</p>
+                                    <p class="text-gray-600 text-sm">{{ alert.impact }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Plan -->
+                        <div class="p-12 border-b border-gray-100">
+                            <h2 class="text-3xl font-bold mb-8 text-gray-800">📋 改善建议</h2>
+                            <div class="bg-green-50 rounded-2xl p-8 border-l-4 border-pivort-green">
+                                <h3 class="text-xl font-bold mb-4 text-pivort-green">优先行动方向</h3>
+                                <p class="text-gray-700 text-lg mb-6">{{ actionPlanPriority }}</p>
+                                <ul class="space-y-3 text-gray-700">
+                                    <li class="flex items-start">
+                                        <span class="text-pivort-green mr-3 text-xl">✓</span>
+                                        <span>立即制定针对性改善计划,设定可量化的阶段性目标</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="text-pivort-green mr-3 text-xl">✓</span>
+                                        <span>建立定期复盘机制,每月追踪关键指标变化</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="text-pivort-green mr-3 text-xl">✓</span>
+                                        <span>考虑寻求专业财务顾问支持,获取定制化解决方案</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Benchmark -->
+                        <div class="p-12 border-b border-gray-100">
+                            <h2 class="text-3xl font-bold mb-8 text-gray-800">📊 行业对标</h2>
+                            <div class="bg-blue-50 rounded-2xl p-8">
+                                <p class="text-gray-700 text-lg leading-relaxed">{{ benchmarkText }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Contact Section -->
+                        <div class="p-12 bg-gradient-to-br from-green-50 to-white">
+                            <h2 class="text-3xl font-bold mb-8 text-center text-gray-800">📞 联系我们</h2>
+                            <p class="text-center text-gray-600 mb-8 text-lg">如需进一步咨询或定制化财务健康改善方案,欢迎联系我们的专业团队</p>
+                            
+                            <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                                <!-- Contact Info -->
+                                <div class="space-y-6">
+                                    <div class="flex items-start bg-white rounded-xl p-6 shadow-sm">
+                                        <svg class="w-6 h-6 text-pivort-green mr-4 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                                        </svg>
+                                        <div>
+                                            <div class="text-sm text-gray-500 mb-1">咨询热线</div>
+                                            <div class="text-lg font-bold text-gray-800">400-XXX-XXXX</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex items-start bg-white rounded-xl p-6 shadow-sm">
+                                        <svg class="w-6 h-6 text-pivort-green mr-4 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                        </svg>
+                                        <div>
+                                            <div class="text-sm text-gray-500 mb-1">电子邮箱</div>
+                                            <div class="text-lg font-bold text-gray-800">info@pivotfin.com</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex items-start bg-white rounded-xl p-6 shadow-sm">
+                                        <svg class="w-6 h-6 text-pivort-green mr-4 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        </svg>
+                                        <div>
+                                            <div class="text-sm text-gray-500 mb-1">公司地址</div>
+                                            <div class="text-lg font-bold text-gray-800">上海市XXX区XXX路XXX号</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- QR Code -->
+                                <div class="flex flex-col items-center justify-center bg-white rounded-xl p-8 shadow-sm">
+                                    <img :src="qrCodeUrl" alt="微信二维码" class="w-48 h-48 mb-4">
+                                    <p class="text-gray-600 font-medium">扫码添加微信咨询</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Footer -->
+                        <div class="bg-gray-50 p-8 text-center text-gray-500 text-sm">
+                            <p class="mb-2">上海贝沃福企业管理咨询有限公司</p>
+                            <p>© 2026 Pivort Fin. All Rights Reserved.</p>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex justify-center gap-6 mt-8">
+                        <button @click="generatePDF" :disabled="isGeneratingPDF" class="px-8 py-4 btn-gradient text-white rounded-xl font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                            {{ isGeneratingPDF ? '生成中...' : '📥 下载PDF报告' }}
+                        </button>
+                        <button @click="restartAssessment" class="px-8 py-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all">
+                            🔄 重新测评
+                        </button>
+                    </div>
+                </div>
+            </transition>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                const logoUrl = 'https://cdn.gooo.ai/user-files/f39f3b0c5ad8f5ae11c28aad6c4623f1fa276039214190d3f5c2044bc014bf24@chat';
+                const qrCodeUrl = 'https://cdn.gooo.ai/user-files/80b0740796d04aedee490f1f973353521ed4d01b8517071ce235e82908b4f3a9@chat';
+
+                const currentScreen = ref('home');
+                const selectedVersion = ref(null);
+                const currentQuestionIndex = ref(0);
+                const answers = ref([]);
+                const isGeneratingPDF = ref(false);
+
+                let radarChartInstance = null;
+                let barChartInstance = null;
+
+                const versions = [
+                    { id: 'entrepreneur', icon: '🚀', title: '创业者版', desc: '适合初创企业主与创业者' },
+                    { id: 'personal', icon: '👤', title: '个人/家庭版', desc: '适合个人与家庭财务规划' },
+                    { id: 'enterprise', icon: '🏢', title: '企业版', desc: '适合中小企业财务管理' }
+                ];
+
+                const dimensionMappings = {
+                    entrepreneur: ['现金流管理', '融资能力', '成本控制', '盈利能力', '风险管理'],
+                    personal: ['收支平衡', '储蓄能力', '投资规划', '债务管理', '保障体系'],
+                    enterprise: ['资产负债', '营运能力', '盈利能力', '偿债能力', '成长能力']
+                };
+
+                const questionsData = {
+                    entrepreneur: [
+                        { dim: '现金流管理', q: '您的企业目前有多少个月的运营资金储备?', options: [{ t: '6个月以上', s: 3 }, { t: '3-6个月', s: 2 }, { t: '1-3个月', s: 1 }, { t: '不足1个月', s: 0 }] },
+                        { dim: '现金流管理', q: '您多久进行一次现金流预测和监控?', options: [{ t: '每周', s: 3 }, { t: '每月', s: 2 }, { t: '每季度', s: 1 }, { t: '很少或从不', s: 0 }] },
+                        { dim: '现金流管理', q: '您的应收账款周转天数是多少?', options: [{ t: '30天以内', s: 3 }, { t: '30-60天', s: 2 }, { t: '60-90天', s: 1 }, { t: '90天以上', s: 0 }] },
+                        { dim: '现金流管理', q: '您是否有应急资金计划来应对突发情况?', options: [{ t: '有完善的应急计划', s: 3 }, { t: '有基本计划', s: 2 }, { t: '计划不完善', s: 1 }, { t: '没有计划', s: 0 }] },
+                        { dim: '融资能力', q: '您的企业目前的融资渠道有哪些?', options: [{ t: '多元化融资渠道', s: 3 }, { t: '2-3个渠道', s: 2 }, { t: '单一渠道', s: 1 }, { t: '无融资渠道', s: 0 }] },
+                        { dim: '融资能力', q: '您的企业信用评级如何?', options: [{ t: '优秀', s: 3 }, { t: '良好', s: 2 }, { t: '一般', s: 1 }, { t: '较差或未评级', s: 0 }] },
+                        { dim: '融资能力', q: '您是否有清晰的融资计划和使用规划?', options: [{ t: '有详细计划', s: 3 }, { t: '有基本规划', s: 2 }, { t: '规划不清晰', s: 1 }, { t: '没有规划', s: 0 }] },
+                        { dim: '融资能力', q: '您的资产负债率处于什么水平?', options: [{ t: '低于40%', s: 3 }, { t: '40%-60%', s: 2 }, { t: '60%-80%', s: 1 }, { t: '高于80%', s: 0 }] },
+                        { dim: '成本控制', q: '您是否定期进行成本分析和优化?', options: [{ t: '每月分析优化', s: 3 }, { t: '每季度分析', s: 2 }, { t: '每年分析', s: 1 }, { t: '很少分析', s: 0 }] },
+                        { dim: '成本控制', q: '您的固定成本占总成本的比例是多少?', options: [{ t: '低于30%', s: 3 }, { t: '30%-50%', s: 2 }, { t: '50%-70%', s: 1 }, { t: '高于70%', s: 0 }] },
+                        { dim: '成本控制', q: '您是否有成本预警机制?', options: [{ t: '有完善的预警系统', s: 3 }, { t: '有基本预警', s: 2 }, { t: '预警不完善', s: 1 }, { t: '没有预警', s: 0 }] },
+                        { dim: '成本控制', q: '您的供应链管理效率如何?', options: [{ t: '非常高效', s: 3 }, { t: '比较高效', s: 2 }, { t: '一般', s: 1 }, { t: '效率较低', s: 0 }] },
+                        { dim: '盈利能力', q: '您的企业目前的毛利率水平如何?', options: [{ t: '高于40%', s: 3 }, { t: '30%-40%', s: 2 }, { t: '20%-30%', s: 1 }, { t: '低于20%', s: 0 }] },
+                        { dim: '盈利能力', q: '您的企业是否已经实现盈利?', options: [{ t: '持续盈利', s: 3 }, { t: '偶尔盈利', s: 2 }, { t: '接近盈亏平衡', s: 1 }, { t: '持续亏损', s: 0 }] },
+                        { dim: '盈利能力', q: '您的客户获取成本(CAC)与客户生命周期价值(LTV)的比例如何?', options: [{ t: 'LTV/CAC > 3', s: 3 }, { t: 'LTV/CAC = 2-3', s: 2 }, { t: 'LTV/CAC = 1-2', s: 1 }, { t: 'LTV/CAC < 1', s: 0 }] },
+                        { dim: '盈利能力', q: '您是否有明确的盈利增长策略?', options: [{ t: '有清晰的增长路径', s: 3 }, { t: '有基本策略', s: 2 }, { t: '策略不明确', s: 1 }, { t: '没有策略', s: 0 }] },
+                        { dim: '风险管理', q: '您是否购买了必要的商业保险?', options: [{ t: '保障全面', s: 3 }, { t: '有基本保障', s: 2 }, { t: '保障不足', s: 1 }, { t: '没有保险', s: 0 }] },
+                        { dim: '风险管理', q: '您是否有风险识别和评估机制?', options: [{ t: '有完善机制', s: 3 }, { t: '有基本机制', s: 2 }, { t: '机制不完善', s: 1 }, { t: '没有机制', s: 0 }] },
+                        { dim: '风险管理', q: '您的业务是否过度依赖单一客户或供应商?', options: [{ t: '不依赖', s: 3 }, { t: '轻度依赖', s: 2 }, { t: '中度依赖', s: 1 }, { t: '高度依赖', s: 0 }] },
+                        { dim: '风险管理', q: '您是否有业务连续性计划(BCP)?', options: [{ t: '有完善计划', s: 3 }, { t: '有基本计划', s: 2 }, { t: '计划不完善', s: 1 }, { t: '没有计划', s: 0 }] }
+                    ],
+                    personal: [
+                        { dim: '收支平衡', q: '您每月的收入是否能够覆盖所有支出?', options: [{ t: '收入远大于支出', s: 3 }, { t: '收入略大于支出', s: 2 }, { t: '收支基本平衡', s: 1 }, { t: '支出大于收入', s: 0 }] },
+                        { dim: '收支平衡', q: '您是否有记账习惯,清楚自己的收支情况?', options: [{ t: '每天记账', s: 3 }, { t: '每周记账', s: 2 }, { t: '偶尔记账', s: 1 }, { t: '从不记账', s: 0 }] },
+                        { dim: '收支平衡', q: '您的固定支出(房租、贷款等)占收入的比例是多少?', options: [{ t: '低于30%', s: 3 }, { t: '30%-50%', s: 2 }, { t: '50%-70%', s: 1 }, { t: '高于70%', s: 0 }] },
+                        { dim: '收支平衡', q: '您是否有预算规划并严格执行?', options: [{ t: '有详细预算且严格执行', s: 3 }, { t: '有预算但执行不严', s: 2 }, { t: '预算不详细', s: 1 }, { t: '没有预算', s: 0 }] },
+                        { dim: '储蓄能力', q: '您每月能储蓄收入的多少比例?', options: [{ t: '30%以上', s: 3 }, { t: '20%-30%', s: 2 }, { t: '10%-20%', s: 1 }, { t: '低于10%或无储蓄', s: 0 }] },
+                        { dim: '储蓄能力', q: '您有多少个月的应急储备金?', options: [{ t: '6个月以上', s: 3 }, { t: '3-6个月', s: 2 }, { t: '1-3个月', s: 1 }, { t: '不足1个月', s: 0 }] },
+                        { dim: '储蓄能力', q: '您是否有明确的储蓄目标?', options: [{ t: '有清晰的短期和长期目标', s: 3 }, { t: '有基本目标', s: 2 }, { t: '目标不明确', s: 1 }, { t: '没有目标', s: 0 }] },
+                        { dim: '储蓄能力', q: '您的储蓄是否有自动化机制(如自动转账)?', options: [{ t: '有自动化储蓄', s: 3 }, { t: '定期手动储蓄', s: 2 }, { t: '偶尔储蓄', s: 1 }, { t: '没有储蓄习惯', s: 0 }] },
+                        { dim: '投资规划', q: '您是否有进行投资理财?', options: [{ t: '有多元化投资组合', s: 3 }, { t: '有基本投资', s: 2 }, { t: '投资单一', s: 1 }, { t: '没有投资', s: 0 }] },
+                        { dim: '投资规划', q: '您对投资风险的了解程度如何?', options: [{ t: '非常了解', s: 3 }, { t: '比较了解', s: 2 }, { t: '了解一点', s: 1 }, { t: '不了解', s: 0 }] },
+                        { dim: '投资规划', q: '您的投资收益率如何?', options: [{ t: '高于市场平均', s: 3 }, { t: '接近市场平均', s: 2 }, { t: '低于市场平均', s: 1 }, { t: '亏损或未投资', s: 0 }] },
+                        { dim: '投资规划', q: '您是否定期复盘和调整投资组合?', options: [{ t: '每季度复盘', s: 3 }, { t: '每年复盘', s: 2 }, { t: '偶尔复盘', s: 1 }, { t: '从不复盘', s: 0 }] },
+                        { dim: '债务管理', q: '您的总负债(房贷、车贷、信用卡等)占年收入的比例是多少?', options: [{ t: '低于1倍', s: 3 }, { t: '1-2倍', s: 2 }, { t: '2-3倍', s: 1 }, { t: '高于3倍', s: 0 }] },
+                        { dim: '债务管理', q: '您是否有高利率债务(如信用卡分期、消费贷)?', options: [{ t: '没有', s: 3 }, { t: '少量', s: 2 }, { t: '中等', s: 1 }, { t: '较多', s: 0 }] },
+                        { dim: '债务管理', q: '您每月的债务还款额占收入的比例是多少?', options: [{ t: '低于20%', s: 3 }, { t: '20%-35%', s: 2 }, { t: '35%-50%', s: 1 }, { t: '高于50%', s: 0 }] },
+                        { dim: '债务管理', q: '您是否有清晰的债务偿还计划?', options: [{ t: '有详细计划', s: 3 }, { t: '有基本计划', s: 2 }, { t: '计划不清晰', s: 1 }, { t: '没有计划', s: 0 }] },
+                        { dim: '保障体系', q: '您是否购买了医疗保险?', options: [{ t: '有充足的商业医疗保险', s: 3 }, { t: '有基本医保', s: 2 }, { t: '保障不足', s: 1 }, { t: '没有保险', s: 0 }] },
+                        { dim: '保障体系', q: '您是否购买了人寿保险?', options: [{ t: '有充足保障', s: 3 }, { t: '有基本保障', s: 2 }, { t: '保障不足', s: 1 }, { t: '没有保险', s: 0 }] },
+                        { dim: '保障体系', q: '您是否有意外险和重疾险?', options: [{ t: '两者都有', s: 3 }, { t: '有其中一种', s: 2 }, { t: '保障不足', s: 1 }, { t: '都没有', s: 0 }] },
+                        { dim: '保障体系', q: '您的保险保额是否足够覆盖家庭至少3年的生活费用?', options: [{ t: '5年以上', s: 3 }, { t: '3-5年', s: 2 }, { t: '1-3年', s: 1 }, { t: '不足1年', s: 0 }] }
+                    ],
+                    enterprise: [
+                        { dim: '资产负债', q: '您企业的资产负债率处于什么水平?', options: [{ t: '低于40%', s: 3 }, { t: '40%-60%', s: 2 }, { t: '60%-80%', s: 1 }, { t: '高于80%', s: 0 }] },
+                        { dim: '资产负债', q: '您企业的流动比率(流动资产/流动负债)是多少?', options: [{ t: '2.0以上', s: 3 }, { t: '1.5-2.0', s: 2 }, { t: '1.0-1.5', s: 1 }, { t: '低于1.0', s: 0 }] },
+                        { dim: '资产负债', q: '您企业的速动比率(速动资产/流动负债)是多少?', options: [{ t: '1.5以上', s: 3 }, { t: '1.0-1.5', s: 2 }, { t: '0.8-1.0', s: 1 }, { t: '低于0.8', s: 0 }] },
+                        { dim: '资产负债', q: '您企业的资产结构是否合理?', options: [{ t: '非常合理', s: 3 }, { t: '比较合理', s: 2 }, { t: '需要优化', s: 1 }, { t: '结构不合理', s: 0 }] },
+                        { dim: '营运能力', q: '您企业的应收账款周转天数是多少?', options: [{ t: '30天以内', s: 3 }, { t: '30-60天', s: 2 }, { t: '60-90天', s: 1 }, { t: '90天以上', s: 0 }] },
+                        { dim: '营运能力', q: '您企业的存货周转天数是多少?', options: [{ t: '30天以内', s: 3 }, { t: '30-60天', s: 2 }, { t: '60-90天', s: 1 }, { t: '90天以上', s: 0 }] },
+                        { dim: '营运能力', q: '您企业的总资产周转率如何?', options: [{ t: '1.5次以上', s: 3 }, { t: '1.0-1.5次', s: 2 }, { t: '0.5-1.0次', s: 1 }, { t: '低于0.5次', s: 0 }] },
+                        { dim: '营运能力', q: '您企业的营运资金管理效率如何?', options: [{ t: '非常高效', s: 3 }, { t: '比较高效', s: 2 }, { t: '一般', s: 1 }, { t: '效率较低', s: 0 }] },
+                        { dim: '盈利能力', q: '您企业的毛利率水平如何?', options: [{ t: '高于40%', s: 3 }, { t: '30%-40%', s: 2 }, { t: '20%-30%', s: 1 }, { t: '低于20%', s: 0 }] },
+                        { dim: '盈利能力', q: '您企业的净利率水平如何?', options: [{ t: '高于15%', s: 3 }, { t: '10%-15%', s: 2 }, { t: '5%-10%', s: 1 }, { t: '低于5%或亏损', s: 0 }] },
+                        { dim: '盈利能力', q: '您企业的净资产收益率(ROE)如何?', options: [{ t: '高于20%', s: 3 }, { t: '15%-20%', s: 2 }, { t: '10%-15%', s: 1 }, { t: '低于10%', s: 0 }] },
+                        { dim: '盈利能力', q: '您企业的盈利增长趋势如何?', options: [{ t: '持续快速增长', s: 3 }, { t: '稳定增长', s: 2 }, { t: '增长缓慢', s: 1 }, { t: '下降或波动大', s: 0 }] },
+                        { dim: '偿债能力', q: '您企业的利息保障倍数(息税前利润/利息费用)是多少?', options: [{ t: '5倍以上', s: 3 }, { t: '3-5倍', s: 2 }, { t: '1-3倍', s: 1 }, { t: '低于1倍', s: 0 }] },
+                        { dim: '偿债能力', q: '您企业的现金流是否能够覆盖短期债务?', options: [{ t: '完全覆盖且有余', s: 3 }, { t: '基本覆盖', s: 2 }, { t: '勉强覆盖', s: 1 }, { t: '无法覆盖', s: 0 }] },
+                        { dim: '偿债能力', q: '您企业是否有稳定的融资渠道?', options: [{ t: '多元化融资渠道', s: 3 }, { t: '2-3个渠道', s: 2 }, { t: '单一渠道', s: 1 }, { t: '融资困难', s: 0 }] },
+                        { dim: '偿债能力', q: '您企业的信用评级如何?', options: [{ t: '优秀', s: 3 }, { t: '良好', s: 2 }, { t: '一般', s: 1 }, { t: '较差或未评级', s: 0 }] },
+                        { dim: '成长能力', q: '您企业近三年的营收增长率如何?', options: [{ t: '年均增长30%以上', s: 3 }, { t: '年均增长15%-30%', s: 2 }, { t: '年均增长5%-15%', s: 1 }, { t: '低于5%或负增长', s: 0 }] },
+                        { dim: '成长能力', q: '您企业的市场份额变化趋势如何?', options: [{ t: '持续扩大', s: 3 }, { t: '稳定增长', s: 2 }, { t: '基本持平', s: 1 }, { t: '下降', s: 0 }] },
+                        { dim: '成长能力', q: '您企业是否有清晰的战略规划和增长路径?', options: [{ t: '有详细的3-5年规划', s: 3 }, { t: '有基本规划', s: 2 }, { t: '规划不清晰', s: 1 }, { t: '没有规划', s: 0 }] },
+                        { dim: '成长能力', q: '您企业的研发投入占营收的比例是多少?', options: [{ t: '5%以上', s: 3 }, { t: '3%-5%', s: 2 }, { t: '1%-3%', s: 1 }, { t: '低于1%', s: 0 }] }
+                    ]
+                };
+
+                const activeVersionObj = computed(() => versions.find(v => v.id === selectedVersion.value) || {});
+                const currentQuestions = computed(() => questionsData[selectedVersion.value] || []);
+                const currentQuestion = computed(() => currentQuestions.value[currentQuestionIndex.value] || {});
+
+                const dimensionScores = computed(() => {
+                    const dims = dimensionMappings[selectedVersion.value] || [];
+                    const scores = {};
+                    dims.forEach(dim => {
+                        const dimQuestions = currentQuestions.value.filter(q => q.dim === dim);
+                        const dimScore = dimQuestions.reduce((sum, q, idx) => {
+                            const globalIdx = currentQuestions.value.indexOf(q);
+                            const answerIdx = answers.value[globalIdx];
+                            return sum + (answerIdx !== undefined ? q.options[answerIdx].s : 0);
+                        }, 0);
+                        const maxScore = dimQuestions.length * 3;
+                        scores[dim] = Math.round((dimScore / maxScore) * 100);
+                    });
+                    return scores;
+                });
+
+                const totalScore = computed(() => {
+                    const rawScore = currentQuestions.value.reduce((sum, q, idx) => {
+                        const answerIdx = answers.value[idx];
+                        return sum + (answerIdx !== undefined ? q.options[answerIdx].s : 0);
+                    }, 0);
+                    return Math.round((rawScore / 60) * 100);
+                });
+
+                const scoreLevel = computed(() => {
+                    const score = totalScore.value;
+                    if (score >= 80) return '优秀';
+                    if (score >= 60) return '良好';
+                    if (score >= 40) return '中等';
+                    return '需改善';
+                });
+
+                const suggestionText = computed(() => {
+                    const score = totalScore.value;
+                    if (score >= 80) return '恭喜!您的财务健康状况整体优秀,各维度表现均衡。建议继续保持良好习惯,定期复盘优化,并考虑更高阶的财富管理策略。';
+                    if (score >= 60) return '您的财务健康状况良好,但部分维度仍有提升空间。建议重点关注得分较低的维度,制定针对性改善计划,逐步优化财务结构。';
+                    if (score >= 40) return '您的财务健康状况处于中等水平,存在一定风险隐患。建议尽快采取行动,优先解决得分最低的维度,建立财务缓冲机制,避免陷入财务困境。';
+                    return '您的财务健康状况亮起红灯,存在严重风险。强烈建议立即采取行动,优先解决最紧急的问题,并考虑寻求专业财务顾问的帮助,制定系统性改善方案。';
+                });
+
+                const hasRisks = computed(() => {
+                    return Object.values(dimensionScores.value).some(score => score < 34);
+                });
+
+                const riskAlerts = computed(() => {
+                    const alerts = [];
+                    Object.entries(dimensionScores.value).forEach(([dim, score]) => {
+                        if (score < 34) {
+                            alerts.push({
+                                dim,
+                                level: score < 17 ? '高风险' : '中风险',
+                                status: score < 17 ? '该维度表现严重不足,存在重大财务风险' : '该维度表现较差,需要重点关注',
+                                impact: score < 17 ? '可能导致严重的财务困境,影响企业或家庭的正常运转' : '可能影响财务稳定性,需要尽快改善'
+                            });
+                        }
+                    });
+                    return alerts;
+                });
+
+                const actionPlanPriority = computed(() => {
+                    const lowestDim = Object.entries(dimensionScores.value).sort((a, b) => a[1] - b[1])[0];
+                    return `重点改善"${lowestDim[0]}"维度(当前得分${lowestDim[1]}分)`;
+                });
+
+                const benchmarkText = computed(() => {
+                    const score = totalScore.value;
+                    if (score >= 85) return `您的得分超过行业优秀水平(85分),处于前15%的优秀区间。`;
+                    if (score >= 65) return `您的得分接近行业平均水平(65分),处于中等偏上区间,还有提升空间。`;
+                    return `您的得分低于行业平均水平(65分),建议尽快采取行动改善财务状况。`;
+                });
+
+                const currentDate = computed(() => {
+                    const now = new Date();
+                    return `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+                });
+
+                function startAssessment(versionId) {
+                    selectedVersion.value = versionId;
+                    currentQuestionIndex.value = 0;
+                    answers.value = [];
+                    currentScreen.value = 'assessment';
+                }
+
+                function backToHome() {
+                    currentScreen.value = 'home';
+                    selectedVersion.value = null;
+                    currentQuestionIndex.value = 0;
+                    answers.value = [];
+                    if (radarChartInstance) {
+                        radarChartInstance.destroy();
+                        radarChartInstance = null;
+                    }
+                    if (barChartInstance) {
+                        barChartInstance.destroy();
+                        barChartInstance = null;
+                    }
+                }
+
+                function selectOption(idx) {
+                    answers.value[currentQuestionIndex.value] = idx;
+                }
+
+                function prevQuestion() {
+                    if (currentQuestionIndex.value > 0) {
+                        currentQuestionIndex.value--;
+                    }
+                }
+
+                function nextQuestion() {
+                    if (currentQuestionIndex.value < 19 && answers.value[currentQuestionIndex.value] !== undefined) {
+                        currentQuestionIndex.value++;
+                    }
+                }
+
+                function submitAssessment() {
+                    if (answers.value[currentQuestionIndex.value] !== undefined) {
+                        currentScreen.value = 'result';
+                        nextTick(() => {
+                            setTimeout(() => {
+                                initCharts();
+                            }, 300);
+                        });
+                    }
+                }
+
+                function restartAssessment() {
+                    backToHome();
+                }
+
+                function initCharts() {
+                    const dims = dimensionMappings[selectedVersion.value];
+                    const scores = dims.map(dim => dimensionScores.value[dim] || 0);
+
+                    if (radarChartInstance) {
+                        radarChartInstance.destroy();
+                    }
+                    if (barChartInstance) {
+                        barChartInstance.destroy();
+                    }
+
+                    const radarCtx = document.getElementById('radarChart');
+                    if (radarCtx) {
+                        radarChartInstance = new Chart(radarCtx, {
+                            type: 'radar',
+                            data: {
+                                labels: dims,
+                                datasets: [{
+                                    label: '得分',
+                                    data: scores,
+                                    backgroundColor: 'rgba(107, 191, 89, 0.2)',
+                                    borderColor: 'rgba(107, 191, 89, 1)',
+                                    borderWidth: 2,
+                                    pointBackgroundColor: 'rgba(107, 191, 89, 1)',
+                                    pointBorderColor: '#fff',
+                                    pointHoverBackgroundColor: '#fff',
+                                    pointHoverBorderColor: 'rgba(107, 191, 89, 1)'
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                scales: {
+                                    r: {
+                                        beginAtZero: true,
+                                        max: 100,
+                                        ticks: { stepSize: 20 }
+                                    }
+                                },
+                                plugins: {
+                                    legend: { display: false }
+                                }
+                            }
+                        });
+                    }
+
+                    const barCtx = document.getElementById('barChart');
+                    if (barCtx) {
+                        barChartInstance = new Chart(barCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: dims,
+                                datasets: [{
+                                    label: '得分',
+                                    data: scores,
+                                    backgroundColor: scores.map(s => s >= 67 ? 'rgba(34, 197, 94, 0.8)' : s >= 34 ? 'rgba(251, 191, 36, 0.8)' : 'rgba(239, 68, 68, 0.8)'),
+                                    borderColor: scores.map(s => s >= 67 ? 'rgb(34, 197, 94)' : s >= 34 ? 'rgb(251, 191, 36)' : 'rgb(239, 68, 68)'),
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        max: 100,
+                                        ticks: { stepSize: 20 }
+                                    }
+                                },
+                                plugins: {
+                                    legend: { display: false }
+                                }
+                            }
+                        });
+                    }
+                }
+
+                async function generatePDF() {
+                    isGeneratingPDF.value = true;
+                    try {
+                        const { jsPDF } = window.jspdf;
+                        const pdf = new jsPDF('p', 'mm', 'a4');
+                        const container = document.getElementById('report-container');
+                        
+                        const canvas = await html2canvas(container, {
+                            scale: 2,
+                            useCORS: true,
+                            logging: false,
+                            backgroundColor: '#ffffff'
+                        });
+                        
+                        const imgData = canvas.toDataURL('image/png');
+                        const imgWidth = 210;
+                        const pageHeight = 297;
+                        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                        let heightLeft = imgHeight;
+                        let position = 0;
+
+                        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                        heightLeft -= pageHeight;
+
+                        while (heightLeft >= 0) {
+                            position = heightLeft - imgHeight;
+                            pdf.addPage();
+                            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                            heightLeft -= pageHeight;
+                        }
+
+                        pdf.save(`财务健康测评报告-${activeVersionObj.value.title}-${currentDate.value}.pdf`);
+                    } catch (error) {
+                        console.error('PDF生成失败:', error);
+                        alert('PDF生成失败,请稍后重试');
+                    } finally {
+                        isGeneratingPDF.value = false;
+                    }
+                }
+
+                return {
+                    logoUrl,
+                    qrCodeUrl,
+                    currentScreen,
+                    versions,
+                    activeVersionObj,
+                    currentQuestionIndex,
+                    currentQuestion,
+                    answers,
+                    totalScore,
+                    scoreLevel,
+                    suggestionText,
+                    dimensionScores,
+                    hasRisks,
+                    riskAlerts,
+                    actionPlanPriority,
+                    benchmarkText,
+                    currentDate,
+                    isGeneratingPDF,
+                    startAssessment,
+                    backToHome,
+                    selectOption,
+                    prevQuestion,
+                    nextQuestion,
+                    submitAssessment,
+                    restartAssessment,
+                    generatePDF
+                };
+            }
+        }).mount('#app');
+    </script>
