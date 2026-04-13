@@ -1,0 +1,538 @@
+
+
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>财务健康指数测评 - Pivort Fin.</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        pivort: { black: '#1a1a1a', dark: '#2d2d2d', green: '#6BBF59', lightgreen: '#5aa848' }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans SC', sans-serif; background-color: #f3f4f6; color: #1a1a1a; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        .slide-fade-enter-active { transition: all 0.4s ease-out; }
+        .slide-fade-leave-active { transition: all 0.3s cubic-bezier(1, 0.5, 0.8, 1); position: absolute; width: 100%; }
+        .slide-fade-enter-from { transform: translateX(20px); opacity: 0; }
+        .slide-fade-leave-to { transform: translateX(-20px); opacity: 0; }
+        .gradient-text { background: linear-gradient(135deg, #6BBF59 0%, #5aa848 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .btn-gradient { background: linear-gradient(135deg, #6BBF59 0%, #5aa848 100%); }
+    </style>
+
+
+    <div id="app" class="min-h-screen flex flex-col">
+        <!-- Navbar -->
+        <nav v-if="currentScreen === 'home'" class="w-full bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+            <div class="max-w-7xl mx-auto px-6 h-24 flex items-center justify-between">
+                <img :src="logoUrl" alt="Logo" class="h-16">
+                <div class="hidden md:block text-sm text-gray-500 font-medium">上海贝沃福企业管理咨询有限公司</div>
+            </div>
+        </nav>
+
+        <main class="flex-grow flex flex-col w-full pb-16 pt-8">
+            <transition name="fade" mode="out-in">
+                <!-- Home Screen -->
+                <div v-if="currentScreen === 'home'" class="w-full flex flex-col items-center px-4 mt-16">
+                    <h1 class="text-5xl font-black mb-6 text-gray-800">财务健康指数测评</h1>
+                    <p class="text-xl text-gray-500 mb-16 max-w-2xl text-center">选择最适合您的测评版本,只需5分钟,即可获得多维度财务健康诊断。</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto w-full">
+                        <div v-for="v in versions" :key="v.id" @click="startAssessment(v.id)" class="bg-white hover:-translate-y-3 hover:border-pivort-green border-2 border-transparent transition-all duration-300 cursor-pointer rounded-3xl p-10 flex flex-col items-center text-center group shadow-lg">
+                            <div class="text-6xl mb-6 group-hover:scale-110 transition-transform">{{ v.icon }}</div>
+                            <h3 class="text-2xl font-bold mb-4 text-gray-800">{{ v.title }}</h3>
+                            <p class="text-gray-500">{{ v.desc }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Assessment Screen -->
+                <div v-else-if="currentScreen === 'assessment'" class="max-w-3xl mx-auto w-full px-4">
+                    <div class="flex justify-between items-center mb-10">
+                        <button @click="backToHome" class="flex items-center text-gray-500 hover:text-pivort-green font-medium">← 返回首页</button>
+                        <span class="px-5 py-2 bg-green-100 text-pivort-green rounded-full text-sm font-bold">{{ activeVersionObj.icon }} {{ activeVersionObj.title }}</span>
+                    </div>
+
+                    <div class="mb-12">
+                        <div class="flex justify-between text-sm font-bold text-gray-500 mb-3">
+                            <span>当前进度</span>
+                            <span class="text-pivort-green">第 {{ currentQuestionIndex + 1 }} 题 / 共 20 题</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-3">
+                            <div class="bg-gradient-to-r from-pivort-green to-pivort-lightgreen h-3 rounded-full transition-all duration-500" :style="{ width: ((currentQuestionIndex + 1) / 20 * 100) + '%' }"></div>
+                        </div>
+                    </div>
+
+                    <div class="relative min-h-[400px]">
+                        <transition name="slide-fade" mode="out-in">
+                            <div :key="currentQuestionIndex" class="bg-white rounded-3xl p-12 shadow-xl border border-gray-100">
+                                <div class="flex justify-between mb-8">
+                                    <div class="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-pivort-green font-black text-xl">{{ currentQuestionIndex + 1 }}</div>
+                                    <span class="px-4 py-1.5 bg-gray-50 text-gray-500 text-sm font-medium rounded-lg">{{ currentQuestion.dim }}</span>
+                                </div>
+                                
+                                <h2 class="text-3xl font-bold mb-10 leading-snug text-gray-800">{{ currentQuestion.q }}</h2>
+
+                                <div class="grid gap-4 mb-8">
+                                    <button v-for="(opt, idx) in currentQuestion.options" :key="idx" @click="selectOption(idx)" :class="['w-full text-left p-5 rounded-2xl border-2 transition-all flex items-center group',
+                                                     answers[currentQuestionIndex] === idx ? 'border-pivort-green bg-pivort-green text-white shadow-lg' : 'border-gray-100 hover:border-green-200 hover:bg-green-50 text-gray-700 bg-white']">
+                                        <div :class="['w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition-all',
+                                                      answers[currentQuestionIndex] === idx ? 'border-white bg-white' : 'border-gray-300 group-hover:border-pivort-green']">
+                                            <div v-if="answers[currentQuestionIndex] === idx" class="w-3 h-3 rounded-full bg-pivort-green"></div>
+                                        </div>
+                                        <span class="flex-1 font-medium">{{ opt.t }}</span>
+                                    </button>
+                                </div>
+
+                                <div class="flex justify-between items-center pt-6 border-t border-gray-100">
+                                    <button @click="prevQuestion" :disabled="currentQuestionIndex === 0" :class="['px-6 py-3 rounded-xl font-bold transition-all',
+                                                     currentQuestionIndex === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']">
+                                        ← 上一题
+                                    </button>
+                                    <button v-if="currentQuestionIndex < 19" @click="nextQuestion" :disabled="answers[currentQuestionIndex] === undefined" :class="['px-6 py-3 rounded-xl font-bold transition-all',
+                                                     answers[currentQuestionIndex] === undefined ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'btn-gradient text-white hover:shadow-lg']">
+                                        下一题 →
+                                    </button>
+                                    <button v-else="" @click="submitAssessment" :disabled="answers[currentQuestionIndex] === undefined" :class="['px-6 py-3 rounded-xl font-bold transition-all',
+                                                     answers[currentQuestionIndex] === undefined ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'btn-gradient text-white hover:shadow-lg']">
+                                        查看报告 →
+                                    </button>
+                                </div>
+                            </div>
+                        </transition>
+                    </div>
+                </div>
+
+                <!-- Result Screen -->
+                <div v-else-if="currentScreen === 'result'" class="max-w-5xl mx-auto w-full px-4">
+                    <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
+                        <!-- Report Header -->
+                        <div class="bg-gradient-to-br from-pivort-green to-pivort-lightgreen text-white p-12 text-center">
+                            <img :src="logoUrl" alt="Logo" class="h-20 mx-auto mb-6 brightness-0 invert">
+                            <h1 class="text-4xl font-black mb-4">财务健康指数测评报告</h1>
+                            <p class="text-xl opacity-90">{{ activeVersionObj.title }}</p>
+                        </div>
+
+                        <!-- Score Overview -->
+                        <div class="p-12 border-b border-gray-100">
+                            <div class="text-center mb-8">
+                                <div class="inline-block">
+                                    <div class="text-7xl font-black gradient-text mb-2">{{ totalScore }}</div>
+                                    <div class="text-gray-500 font-medium">综合得分 (满分60分)</div>
+                                </div>
+                            </div>
+                            <div class="flex justify-center gap-6 mb-8">
+                                <div class="px-6 py-3 rounded-full text-lg font-bold" :class="gradeBadge.bg + ' ' + gradeBadge.text">
+                                    {{ gradeBadge.emoji }} {{ gradeBadge.label }}
+                                </div>
+                            </div>
+                            <p class="text-gray-600 text-center max-w-3xl mx-auto leading-relaxed">{{ suggestionText }}</p>
+                        </div>
+
+                        <!-- Charts Section -->
+                        <div class="p-12 border-b border-gray-100">
+                            <h2 class="text-3xl font-bold mb-8 text-gray-800">可视化分析</h2>
+                            <div class="grid md:grid-cols-2 gap-8">
+                                <div class="bg-gray-50 rounded-2xl p-6">
+                                    <h3 class="text-xl font-bold mb-4 text-gray-700">财务健康雷达图</h3>
+                                    <div style="position: relative; height: 300px; width: 100%;">
+                                        <canvas id="radarChart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="bg-gray-50 rounded-2xl p-6">
+                                    <h3 class="text-xl font-bold mb-4 text-gray-700">各维度得分明细表</h3>
+                                    <div style="position: relative; height: 300px; width: 100%;">
+                                        <canvas id="barChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dimension Details -->
+                        <div class="p-12 border-b border-gray-100">
+                            <h2 class="text-3xl font-bold mb-8 text-gray-800">维度详细分析</h2>
+                            <div class="grid gap-6">
+                                <div v-for="(score, dim) in dimensionScores" :key="dim" class="bg-gray-50 rounded-2xl p-6 flex items-center justify-between">
+                                    <div class="flex-1">
+                                        <h3 class="text-xl font-bold mb-2 text-gray-800">{{ dim }}</h3>
+                                        <div class="w-full bg-gray-200 rounded-full h-3">
+                                            <div class="h-3 rounded-full transition-all" :class="score >= 67 ? 'bg-green-500' : score >= 34 ? 'bg-yellow-500' : 'bg-red-500'" :style="{ width: score + '%' }"></div>
+                                        </div>
+                                    </div>
+                                    <div class="ml-6 text-3xl font-black" :class="score >= 67 ? 'text-green-600' : score >= 34 ? 'text-yellow-600' : 'text-red-600'">
+                                        {{ score }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Contact -->
+                        <div class="bg-gradient-to-br from-gray-900 to-gray-800 text-white p-16">
+                            <div class="flex items-center justify-between max-w-3xl mx-auto">
+                                <div class="flex-1 pr-12">
+                                    <h2 class="text-4xl font-black text-pivort-green mb-4">想要深度财务诊断?</h2>
+                                    <p class="text-gray-300 mb-10 text-lg">专业财务顾问为您提供定制化方案,助力实现财务自由。</p>
+                                    
+                                    <div class="space-y-5 bg-white/5 p-6 rounded-2xl border border-white/10">
+                                        <div class="flex items-center">
+                                            <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center mr-4">📱</div>
+                                            <div>
+                                                <div class="text-xs text-gray-400 mb-1">微信号</div>
+                                                <div class="font-bold text-lg">Naia_Yang</div>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center mr-4">☎️</div>
+                                            <div>
+                                                <div class="text-xs text-gray-400 mb-1">联系电话</div>
+                                                <div class="font-bold text-lg">159-9915-1876</div>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <div class="w-10 h-10 rounded-full bg-pivort-green/20 flex items-center justify-center mr-4">⏰</div>
+                                            <div>
+                                                <div class="text-xs text-pivort-green/80 mb-1">尊享服务</div>
+                                                <div class="text-pivort-green font-bold text-lg">30分钟深度财务诊断</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex flex-col items-center">
+                                    <div class="bg-white p-4 rounded-3xl shadow-2xl mb-5">
+                                        <img :src="qrCodeUrl" alt="WeChat QR Code" class="w-48 h-48 rounded-2xl object-cover">
+                                    </div>
+                                    <p class="text-sm font-bold text-pivort-green bg-white/10 px-6 py-2 rounded-full">扫码添加专属顾问</p>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-16 pt-8 border-t border-white/10 text-center">
+                                <p class="text-gray-400 font-bold mb-2">上海贝沃福企业管理咨询有限公司</p>
+                                <p class="text-xs text-gray-500">评估结果仅供参考不作投资建议</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex justify-center gap-6 mt-8">
+                        <button @click="restartAssessment" class="px-8 py-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all">
+                            🔄 重新测评
+                        </button>
+                    </div>
+                </div>
+            </transition>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                const currentScreen = ref('home');
+                const selectedVersion = ref(null);
+                const currentQuestionIndex = ref(0);
+                const answers = ref([]);
+
+                const logoUrl = 'https://cdn.gooo.ai/user-files/f39f3b0c5ad8f5ae11c28aad6c4623f1fa276039214190d3f5c2044bc014bf24@chat';
+                const qrCodeUrl = 'https://cdn.gooo.ai/user-files/80b0740796d04aedee490f1f973353521ed4d01b8517071ce235e82908b4f3a9@chat';
+                
+                let radarChartInstance = null;
+                let barChartInstance = null;
+
+                const versions = [
+                    { id: 'entrepreneur', icon: '🚀', title: '创业者版', desc: '评估创业资金、现金流与风险管理能力' },
+                    { id: 'personal', icon: '👤', title: '个人/家庭版', desc: '评估个人与家庭的财务健康状况' },
+                    { id: 'enterprise', icon: '🏢', title: '企业版', desc: '评估企业财务管理与运营能力' }
+                ];
+
+                const questionBank = {
+                    entrepreneur: [
+                        { q: "你目前的应急储备金能支撑家庭开销多久?", dim: "个人财务", options: [{t:"6个月以上",s:3},{t:"3-6个月",s:2},{t:"1-3个月",s:1},{t:"不到1个月或没有储备",s:0}] },
+                        { q: "你的个人负债(房贷、车贷、消费贷等)月供占月收入的比例是?", dim: "个人财务", options: [{t:"30%以下",s:3},{t:"30%-50%",s:2},{t:"50%-70%",s:1},{t:"70%以上或说不清楚",s:0}] },
+                        { q: "你和家人的保险配置情况如何?", dim: "个人财务", options: [{t:"有完整的重疾险、医疗险、意外险和寿险",s:3},{t:"有基础医疗险和意外险",s:2},{t:"只有社保或零散的商业保险",s:1},{t:"基本没有保险配置",s:0}] },
+                        { q: "你是否有明确的个人退休/养老规划?", dim: "个人财务", options: [{t:"有清晰规划,并定期投入退休账户或养老金",s:3},{t:"有初步想法,但还没开始执行",s:2},{t:"觉得重要但不知道怎么做",s:1},{t:"还没考虑过,先把事业做好再说",s:0}] },
+                        { q: "你个人的投资组合多样性如何?", dim: "个人财务", options: [{t:"有股票、基金、理财产品等多元化投资",s:3},{t:"主要是银行存款和少量理财",s:2},{t:"几乎全部资金在创业项目或房产上",s:1},{t:"没有额外投资,所有钱都在公司里",s:0}] },
+                        { q: "你多久审视一次个人财务状况?", dim: "个人财务", options: [{t:"每月至少一次,知道每笔收支",s:3},{t:"每季度看一次大概情况",s:2},{t:"一年看一两次",s:1},{t:"基本不看,有钱就花",s:0}] },
+                        { q: "你的企业账上现金能维持正常运营多久?", dim: "企业现金流", options: [{t:"12个月以上",s:3},{t:"6-12个月",s:2},{t:"3-6个月",s:1},{t:"不到3个月",s:0}] },
+                        { q: "你的客户付款账期通常是?", dim: "企业现金流", options: [{t:"大多现款现货或30天内",s:3},{t:"30-60天",s:2},{t:"60-90天",s:1},{t:"90天以上或账期不稳定",s:0}] },
+                        { q: "你是否经常遇到\"有订单但没钱发货\"的情况?", dim: "企业现金流", options: [{t:"从未遇到,现金流很充裕",s:3},{t:"偶尔遇到,但能快速解决",s:2},{t:"经常遇到,需要到处借钱周转",s:1},{t:"几乎每个月都为此焦虑",s:0}] },
+                        { q: "你的应收账款回收情况如何?", dim: "企业现金流", options: [{t:"95%以上按时回款",s:3},{t:"80%-95%按时回款",s:2},{t:"60%-80%按时回款",s:1},{t:"低于60%或有大量坏账",s:0}] },
+                        { q: "企业的固定成本(房租、工资等)占收入比例是?", dim: "企业现金流", options: [{t:"40%以下",s:3},{t:"40%-60%",s:2},{t:"60%-80%",s:1},{t:"80%以上或说不清",s:0}] },
+                        { q: "你是否清楚企业每月的盈亏平衡点?", dim: "企业现金流", options: [{t:"非常清楚,并且实际运营中持续盈利",s:3},{t:"知道盈亏平衡点,但时盈时亏",s:2},{t:"有大概概念,但没具体算过",s:1},{t:"不清楚,只知道账上还有没有钱",s:0}] },
+                        { q: "你的企业有规范的记账习惯吗?", dim: "财务管理", options: [{t:"使用专业财务软件,每笔账都清楚",s:3},{t:"有记账,但不够规范",s:2},{t:"用Excel简单记录",s:1},{t:"基本不记账,或只看银行余额",s:0}] },
+                        { q: "你多久看一次财务报表?", dim: "财务管理", options: [{t:"每月看资产负债表、利润表、现金流量表",s:3},{t:"每月看收支流水",s:2},{t:"每季度或半年看一次",s:1},{t:"只在年底报税时看",s:0}] },
+                        { q: "做重大业务决策时,你会?", dim: "财务管理", options: [{t:"基于详细的财务数据和预测模型",s:3},{t:"看看账上有没有钱,再凭经验判断",s:2},{t:"主要靠直觉和市场机会",s:1},{t:"想做就做,钱不够再想办法",s:0}] },
+                        { q: "你是否有专业的财务人员或财税顾问?", dim: "财务管理", options: [{t:"有专职财务+外部专业顾问",s:3},{t:"有兼职财务或代账公司",s:2},{t:"自己或合伙人兼着做",s:1},{t:"基本没人管财务",s:0}] },
+                        { q: "你的公司账户和个人账户是否严格区分?", dim: "风险意识", options: [{t:"完全分开,从不混用",s:3},{t:"大部分时候分开,偶尔挪用",s:2},{t:"经常混用,但心里有数",s:1},{t:"基本不区分",s:0}] },
+                        { q: "如果主要客户突然流失或市场剧变,你有应对预案吗?", dim: "风险意识", options: [{t:"有详细的风险预案和备用方案",s:3},{t:"有初步想法,知道该找谁帮忙",s:2},{t:"没想过,但觉得自己能应付",s:1},{t:"从没考虑过这种情况",s:0}] },
+                        { q: "你是否为公司配置了必要的商业保险?", dim: "风险意识", options: [{t:"有财产险、责任险、关键人保险等",s:3},{t:"有基础的财产险或责任险",s:2},{t:"只有法律要求的最低保险",s:1},{t:"没有任何商业保险",s:0}] },
+                        { q: "你和合伙人之间有清晰的财务协议吗?", dim: "风险意识", options: [{t:"有完整的合伙协议,包括股权、分红、退出机制",s:3},{t:"有基础协议,但不够详细",s:2},{t:"只有口头约定",s:1},{t:"没有或不适用",s:0}] }
+                    ],
+                    personal: [
+                        { q: "如果突然失业,你的储蓄能支撑家庭正常生活多久?", dim: "应急储备", options: [{t:"6个月以上",s:3},{t:"3-6个月",s:2},{t:"1-3个月",s:1},{t:"不到1个月或基本没有储蓄",s:0}] },
+                        { q: "除了银行存款,你有多少资产可以在一周内变现应急?", dim: "应急储备", options: [{t:"相当于3个月以上家庭开销",s:3},{t:"相当于1-3个月家庭开销",s:2},{t:"相当于半个月家庭开销",s:1},{t:"几乎没有可快速变现的资产",s:0}] },
+                        { q: "你的收入来源稳定性如何?", dim: "应急储备", options: [{t:"有稳定工资+其他收入来源",s:3},{t:"有稳定的工资收入",s:2},{t:"收入不太稳定,时高时低",s:1},{t:"主要靠临时性收入",s:0}] },
+                        { q: "面对突发的大额支出,你通常会?", dim: "应急储备", options: [{t:"从储蓄中支取,不影响正常生活",s:3},{t:"需要动用投资或理财产品",s:2},{t:"需要找亲友借钱或刷信用卡",s:1},{t:"会陷入严重的财务困境",s:0}] },
+                        { q: "你的月度固定支出占家庭月收入的比例是?", dim: "债务支出", options: [{t:"30%以下",s:3},{t:"30%-50%",s:2},{t:"50%-70%",s:1},{t:"70%以上或不清楚",s:0}] },
+                        { q: "你的信用卡使用情况是?", dim: "债务支出", options: [{t:"每月全额还款,从不分期",s:3},{t:"偶尔分期,但都在计划内",s:2},{t:"经常无法全额还款",s:1},{t:"长期只还最低额",s:0}] },
+                        { q: "你的住房支出占月收入的比例是?", dim: "债务支出", options: [{t:"30%以下",s:3},{t:"30%-40%",s:2},{t:"40%-50%",s:1},{t:"50%以上",s:0}] },
+                        { q: "每个月结束时,你的财务状况通常是?", dim: "债务支出", options: [{t:"有计划地储蓄,收支有余",s:3},{t:"基本能存下一些钱",s:2},{t:"月光,偶尔还会透支",s:1},{t:"每月都入不敷出",s:0}] },
+                        { q: "你和家人的医疗保险配置情况如何?", dim: "保险保障", options: [{t:"有社保+商业医疗险+百万医疗",s:3},{t:"有社保+基础商业医疗险",s:2},{t:"只有社保",s:1},{t:"没有任何医疗保险",s:0}] },
+                        { q: "作为家庭经济支柱,你是否配置了充足的寿险?", dim: "保险保障", options: [{t:"有,保额能覆盖家庭未来5-10年开支",s:3},{t:"有,但保额不太够",s:2},{t:"只有公司团体险或很少的商业寿险",s:1},{t:"没有寿险",s:0}] },
+                        { q: "你和家人是否配置了重疾险?", dim: "保险保障", options: [{t:"家庭主要成员都有,保额充足",s:3},{t:"部分成员有,或保额不太够",s:2},{t:"只有一人有或保额很低",s:1},{t:"没有重疾险",s:0}] },
+                        { q: "你的财产保险配置如何?", dim: "保险保障", options: [{t:"有完整的财产保险和第三者责任险",s:3},{t:"有基础的车险和财产险",s:2},{t:"只有法律要求的最低保险",s:1},{t:"基本没有财产保险",s:0}] },
+                        { q: "你的投资组合多样性如何?", dim: "投资增长", options: [{t:"有股票/基金、固定收益、房产等多元化投资",s:3},{t:"主要是基金或银行理财产品",s:2},{t:"只有银行存款或单一投资",s:1},{t:"没有任何投资",s:0}] },
+                        { q: "你是否有明确的退休规划,并定期为此储蓄?", dim: "投资增长", options: [{t:"有清晰的规划,每月固定投入",s:3},{t:"有想法,但投入不够规律",s:2},{t:"知道很重要,但还没开始行动",s:1},{t:"觉得退休还很遥远",s:0}] },
+                        { q: "除了工资,你是否有其他被动收入?", dim: "投资增长", options: [{t:"有,且能覆盖30%以上的家庭开支",s:3},{t:"有,但金额不大",s:2},{t:"正在尝试建立被动收入渠道",s:1},{t:"没有任何被动收入",s:0}] },
+                        { q: "你对个人财务和投资知识的掌握程度如何?", dim: "投资增长", options: [{t:"会主动学习,懂得基本的投资原理",s:3},{t:"了解一些基础知识",s:2},{t:"知道很少,主要听别人推荐",s:1},{t:"几乎不了解",s:0}] },
+                        { q: "你是否有清晰的短期和长期财务目标?", dim: "财务规划", options: [{t:"有明确的目标和实现路径",s:3},{t:"有大致的目标,但不够具体",s:2},{t:"有模糊的想法,但没有计划",s:1},{t:"没想过,走一步看一步",s:0}] },
+                        { q: "你多久审视一次家庭的收入和支出情况?", dim: "财务规划", options: [{t:"每月记账并分析",s:3},{t:"每季度大致看一次",s:2},{t:"偶尔看看,没有规律",s:1},{t:"基本不看",s:0}] },
+                        { q: "你是否考虑过财产传承和遗嘱规划?", dim: "财务规划", options: [{t:"已经做了详细的财产规划",s:3},{t:"有初步想法,但还没正式规划",s:2},{t:"知道很重要,但觉得还早",s:1},{t:"从没想过这个问题",s:0}] },
+                        { q: "你和家人关于财务问题的沟通如何?", dim: "财务规划", options: [{t:"经常讨论财务状况和规划",s:3},{t:"偶尔会聊,但不够深入",s:2},{t:"很少讨论,主要自己决定",s:1},{t:"基本不沟通",s:0}] }
+                    ],
+                    enterprise: [
+                        { q: "您的企业账上现金能维持正常运营多久?", dim: "现金流", options: [{t:"12个月以上",s:3},{t:"6-12个月",s:2},{t:"3-6个月",s:1},{t:"不到3个月",s:0}] },
+                        { q: "企业的经营性现金流状况如何?", dim: "现金流", options: [{t:"持续为正,且逐年增长",s:3},{t:"大部分时间为正",s:2},{t:"经常为负,需要靠融资维持",s:1},{t:"长期为负",s:0}] },
+                        { q: "手头的流动资金够不够周转?", dim: "现金流", options: [{t:"非常充裕,流动资产是短期负债的2倍以上",s:3},{t:"基本够用,流动资产是短期负债的1.5-2倍",s:2},{t:"比较紧张,流动资产勉强覆盖短期负债",s:1},{t:"严重不足",s:0}] },
+                        { q: "您的客户付款账期通常是多久?", dim: "现金流", options: [{t:"大多现款现货或30天内回款",s:3},{t:"30-60天",s:2},{t:"60-90天",s:1},{t:"90天以上或账期很不稳定",s:0}] },
+                        { q: "您是否经常遇到有订单但没钱备货的情况?", dim: "现金流", options: [{t:"从未遇到,资金调配很从容",s:3},{t:"偶尔遇到,但能快速解决",s:2},{t:"经常遇到,需要到处筹钱周转",s:1},{t:"几乎每次大订单都为此发愁",s:0}] },
+                        { q: "企业目前的毛利率水平如何?", dim: "盈利能力", options: [{t:"40%以上",s:3},{t:"25%-40%",s:2},{t:"10%-25%",s:1},{t:"10%以下或不清楚",s:0}] },
+                        { q: "企业目前的经营状况是?", dim: "盈利能力", options: [{t:"持续稳定盈利,净利率在10%以上",s:3},{t:"盈利但净利率较低,或时盈时亏",s:2},{t:"长期微利或盈亏平衡",s:1},{t:"持续亏损",s:0}] },
+                        { q: "您清楚企业每月的盈亏平衡点吗?", dim: "盈利能力", options: [{t:"非常清楚,且实际营业额远超平衡点",s:3},{t:"知道大概,实际营业额略高于平衡点",s:2},{t:"有模糊概念,但没认真算过",s:1},{t:"不清楚",s:0}] },
+                        { q: "企业的固定成本占营业收入的比例是?", dim: "盈利能力", options: [{t:"30%以下",s:3},{t:"30%-50%",s:2},{t:"50%-70%",s:1},{t:"70%以上或说不清",s:0}] },
+                        { q: "企业的总负债占总资产的比例大约是多少?", dim: "资产负债", options: [{t:"40%以下",s:3},{t:"40%-60%",s:2},{t:"60%-80%",s:1},{t:"80%以上或不清楚",s:0}] },
+                        { q: "企业是否有长期借款或银行贷款?", dim: "资产负债", options: [{t:"没有负债或负债很少",s:3},{t:"有适度负债,利息压力可控",s:2},{t:"负债较重,每月还款压力较大",s:1},{t:"负债很重,经常为还款发愁",s:0}] },
+                        { q: "企业的应收账款周转情况如何?", dim: "资产负债", options: [{t:"大部分在30天内回款",s:3},{t:"30-60天回款",s:2},{t:"60-90天回款",s:1},{t:"90天以上或有大量坏账",s:0}] },
+                        { q: "企业的存货周转速度如何?", dim: "资产负债", options: [{t:"存货周转很快,基本不积压",s:3},{t:"周转正常,偶有积压",s:2},{t:"周转较慢,经常积压",s:1},{t:"大量积压或说不清",s:0}] },
+                        { q: "企业有规范的财务管理制度吗?", dim: "财务管理", options: [{t:"有完善的财务制度和专业团队",s:3},{t:"有基础制度,但执行不够严格",s:2},{t:"制度不完善,主要靠经验管理",s:1},{t:"基本没有财务制度",s:0}] },
+                        { q: "企业多久做一次财务分析?", dim: "财务管理", options: [{t:"每月做详细的财务分析",s:3},{t:"每季度分析一次",s:2},{t:"半年或一年分析一次",s:1},{t:"基本不做财务分析",s:0}] },
+                        { q: "企业的成本核算是否清晰?", dim: "财务管理", options: [{t:"非常清晰,每个项目都有详细核算",s:3},{t:"大致清楚,但不够精细",s:2},{t:"只知道大概,没有详细核算",s:1},{t:"基本不清楚成本构成",s:0}] },
+                        { q: "企业是否有年度预算和财务规划?", dim: "财务管理", options: [{t:"有详细的年度预算和滚动预测",s:3},{t:"有年度预算,但执行监控不够",s:2},{t:"有粗略的计划,但不够系统",s:1},{t:"没有预算,走一步看一步",s:0}] },
+                        { q: "企业是否配置了必要的商业保险?", dim: "风险控制", options: [{t:"有完善的保险体系",s:3},{t:"有基础的财产险和责任险",s:2},{t:"只有法律要求的最低保险",s:1},{t:"基本没有商业保险",s:0}] },
+                        { q: "企业对主要客户的依赖程度如何?", dim: "风险控制", options: [{t:"客户分散,单一客户占比不超过20%",s:3},{t:"有几个大客户,但占比可控",s:2},{t:"过度依赖1-2个大客户",s:1},{t:"几乎只有一个大客户",s:0}] },
+                        { q: "企业是否有应对突发风险的预案?", dim: "风险控制", options: [{t:"有完整的风险管理体系和应急预案",s:3},{t:"有初步的风险意识和简单预案",s:2},{t:"知道有风险,但没有具体预案",s:1},{t:"基本没考虑过风险管理",s:0}] }
+                    ]
+                };
+
+                const dimensionMappings = {
+                    entrepreneur: ['个人财务', '企业现金流', '财务管理', '风险意识'],
+                    personal: ['应急储备', '债务支出', '保险保障', '投资增长', '财务规划'],
+                    enterprise: ['现金流', '盈利能力', '资产负债', '财务管理', '风险控制']
+                };
+
+                const currentQuestions = computed(() => selectedVersion.value ? questionBank[selectedVersion.value] : []);
+                const currentQuestion = computed(() => currentQuestions.value[currentQuestionIndex.value] || {});
+                const activeVersionObj = computed(() => versions.find(v => v.id === selectedVersion.value) || {});
+
+                const dimensionScores = computed(() => {
+                    if (!selectedVersion.value || answers.value.length === 0) return {};
+                    const dims = dimensionMappings[selectedVersion.value];
+                    const scores = {};
+                    dims.forEach(dim => { scores[dim] = { total: 0, count: 0 }; });
+                    currentQuestions.value.forEach((q, idx) => {
+                        const answerIdx = answers.value[idx];
+                        if (answerIdx !== undefined) {
+                            scores[q.dim].total += q.options[answerIdx].s;
+                            scores[q.dim].count += 1;
+                        }
+                    });
+                    const result = {};
+                    Object.keys(scores).forEach(dim => {
+                        result[dim] = scores[dim].count > 0 ? Math.round(scores[dim].total / scores[dim].count * 100 / 3) : 0;
+                    });
+                    return result;
+                });
+
+                const totalScore = computed(() => {
+                    let total = 0;
+                    answers.value.forEach((answerIdx, qIdx) => {
+                        if (answerIdx !== undefined && currentQuestions.value[qIdx]) {
+                            total += currentQuestions.value[qIdx].options[answerIdx].s;
+                        }
+                    });
+                    return total;
+                });
+
+                const gradeBadge = computed(() => {
+                    const score = totalScore.value;
+                    if (score >= 48) return { label: '优秀级', emoji: '🌟', bg: 'bg-green-100', text: 'text-green-700' };
+                    if (score >= 36) return { label: '良好级', emoji: '✅', bg: 'bg-blue-100', text: 'text-blue-700' };
+                    if (score >= 24) return { label: '及格级', emoji: '⚠️', bg: 'bg-yellow-100', text: 'text-yellow-700' };
+                    return { label: '需改进级', emoji: '🚨', bg: 'bg-red-100', text: 'text-red-700' };
+                });
+
+                const suggestionText = computed(() => {
+                    const score = totalScore.value;
+                    if (score >= 48) return '恭喜!您的财务健康状况整体优秀,各维度表现均衡。建议继续保持良好习惯,定期复盘优化,并考虑更高阶的财富管理策略。';
+                    if (score >= 36) return '您的财务健康状况良好,但部分维度仍有提升空间。建议重点关注得分较低的维度,制定针对性改善计划,逐步优化财务结构。';
+                    if (score >= 24) return '您的财务健康状况处于中等水平,存在一定风险隐患。建议尽快采取行动,优先解决得分最低的维度,建立财务缓冲机制,避免陷入财务困境。';
+                    return '您的财务健康状况亮起红灯,存在严重风险。强烈建议立即采取行动,优先解决最紧急的问题,并考虑寻求专业财务顾问的帮助,制定系统性改善方案。';
+                });
+
+                function startAssessment(versionId) {
+                    selectedVersion.value = versionId;
+                    currentQuestionIndex.value = 0;
+                    answers.value = [];
+                    currentScreen.value = 'assessment';
+                }
+
+                function backToHome() {
+                    currentScreen.value = 'home';
+                    selectedVersion.value = null;
+                    currentQuestionIndex.value = 0;
+                    answers.value = [];
+                    if (radarChartInstance) {
+                        radarChartInstance.destroy();
+                        radarChartInstance = null;
+                    }
+                    if (barChartInstance) {
+                        barChartInstance.destroy();
+                        barChartInstance = null;
+                    }
+                }
+
+                function selectOption(idx) {
+                    answers.value[currentQuestionIndex.value] = idx;
+                }
+
+                function prevQuestion() {
+                    if (currentQuestionIndex.value > 0) {
+                        currentQuestionIndex.value--;
+                    }
+                }
+
+                function nextQuestion() {
+                    if (currentQuestionIndex.value < 19 && answers.value[currentQuestionIndex.value] !== undefined) {
+                        currentQuestionIndex.value++;
+                    }
+                }
+
+                function submitAssessment() {
+                    if (answers.value[currentQuestionIndex.value] !== undefined) {
+                        currentScreen.value = 'result';
+                        nextTick(() => {
+                            setTimeout(() => {
+                                initCharts();
+                            }, 300);
+                        });
+                    }
+                }
+
+                function restartAssessment() {
+                    backToHome();
+                }
+
+                function initCharts() {
+                    const dims = dimensionMappings[selectedVersion.value];
+                    const scores = dims.map(dim => dimensionScores.value[dim] || 0);
+
+                    if (radarChartInstance) {
+                        radarChartInstance.destroy();
+                    }
+                    if (barChartInstance) {
+                        barChartInstance.destroy();
+                    }
+
+                    const radarCtx = document.getElementById('radarChart');
+                    if (radarCtx) {
+                        radarChartInstance = new Chart(radarCtx, {
+                            type: 'radar',
+                            data: {
+                                labels: dims,
+                                datasets: [{
+                                    label: '得分',
+                                    data: scores,
+                                    backgroundColor: 'rgba(107, 191, 89, 0.2)',
+                                    borderColor: 'rgba(107, 191, 89, 1)',
+                                    borderWidth: 2,
+                                    pointBackgroundColor: 'rgba(107, 191, 89, 1)',
+                                    pointBorderColor: '#fff',
+                                    pointHoverBackgroundColor: '#fff',
+                                    pointHoverBorderColor: 'rgba(107, 191, 89, 1)'
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                scales: {
+                                    r: {
+                                        beginAtZero: true,
+                                        max: 100,
+                                        ticks: { stepSize: 20 }
+                                    }
+                                },
+                                plugins: {
+                                    legend: { display: false }
+                                }
+                            }
+                        });
+                    }
+
+                    const barCtx = document.getElementById('barChart');
+                    if (barCtx) {
+                        barChartInstance = new Chart(barCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: dims,
+                                datasets: [{
+                                    label: '得分',
+                                    data: scores,
+                                    backgroundColor: scores.map(s => s >= 67 ? 'rgba(34, 197, 94, 0.8)' : s >= 34 ? 'rgba(251, 191, 36, 0.8)' : 'rgba(239, 68, 68, 0.8)'),
+                                    borderColor: scores.map(s => s >= 67 ? 'rgb(34, 197, 94)' : s >= 34 ? 'rgb(251, 191, 36)' : 'rgb(239, 68, 68)'),
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        max: 100,
+                                        ticks: { stepSize: 20 }
+                                    }
+                                },
+                                plugins: {
+                                    legend: { display: false }
+                                }
+                            }
+                        });
+                    }
+                }
+
+                return {
+                    logoUrl,
+                    qrCodeUrl,
+                    currentScreen,
+                    versions,
+                    activeVersionObj,
+                    currentQuestionIndex,
+                    currentQuestion,
+                    answers,
+                    totalScore,
+                    gradeBadge,
+                    suggestionText,
+                    dimensionScores,
+                    startAssessment,
+                    backToHome,
+                    selectOption,
+                    prevQuestion,
+                    nextQuestion,
+                    submitAssessment,
+                    restartAssessment
+                };
+            }
+        }).mount('#app');
+    </script>
